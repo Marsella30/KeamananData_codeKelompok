@@ -14,9 +14,21 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\OtpMail;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 
 class LoginController extends Controller
 {
+
+    public function sendTooManyAttemptsResponse($request)
+    {
+        $retryAfter = RateLimiter::availableIn('login', $request->ip());
+
+        return response()->json([
+            'message' => 'Terlalu banyak percobaan login. Coba lagi nanti.',
+            'retry_after' => $retryAfter
+        ], 429);
+    }
+
     public function showOtpForm()
     {
         return view('auth.verify-otp');
@@ -72,7 +84,10 @@ class LoginController extends Controller
 
             // =================== PEMBELI ===================
             case 'pembeli':
+                // Validasi email wajib ada
                 $request->validate(['email' => 'required|email']);
+
+                // Ambil data user Pembeli
                 $user = \App\Models\Pembeli::where('email', $request->email)->first();
 
                 if (!$user) {
@@ -83,15 +98,18 @@ class LoginController extends Controller
                     $msg = $existsInOther 
                         ? 'Email terdaftar tapi bukan sebagai Pembeli.' 
                         : 'Email tidak terdaftar.';
-                    return back()->withErrors(['error' => $msg]);
+
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $user->password)) {
-                    return back()->withErrors(['error' => 'Password salah untuk Pembeli.']);
+                    return response()->json(['error' => 'Password salah untuk Pembeli.'], 422);
                 }
 
-                // Generate OTP
+                // Generate OTP 6 digit
                 $otp = rand(100000, 999999);
+
+                // Simpan OTP & kadaluarsa
                 try {
                     \DB::table('pembeli')
                         ->where('id_pembeli', $user->id_pembeli)
@@ -102,22 +120,27 @@ class LoginController extends Controller
                     Log::info('✅ OTP tersimpan', ['email' => $user->email, 'otp' => $otp]);
                 } catch (\Throwable $e) {
                     Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
-                    return back()->withErrors(['error' => 'Terjadi kesalahan saat menyimpan OTP.']);
+                    return response()->json(['error' => 'Terjadi kesalahan saat menyimpan OTP.'], 500);
                 }
 
+                // Kirim OTP via email
                 try {
-                    Mail::to($user->email)->send(new OtpMail($otp));
+                    Mail::to($user->email)->send(new \App\Mail\OtpMail($otp));
                 } catch (\Throwable $e) {
                     Log::error('⚠️ Gagal kirim OTP: '.$e->getMessage());
                 }
 
+                // Simpan session sementara untuk login OTP
                 session([
                     'pending_email' => $user->email,
                     'pending_role'  => 'pembeli',
                 ]);
 
-                return redirect()->route('otp.show')
-                    ->with('info', 'Kode OTP telah dikirim ke email Anda dan berlaku 5 menit.');
+                return response()->json([
+                    'success' => true,
+                    'redirect_page' => route('otp.show'),
+                    'info' => 'Kode OTP telah dikirim ke email Anda dan berlaku 5 menit.'
+                ]);
 
             // =================== PENITIP ===================
             case 'penitip':
@@ -132,17 +155,22 @@ class LoginController extends Controller
                     $msg = $existsInOther 
                         ? 'Email terdaftar tapi bukan sebagai Penitip.' 
                         : 'Email tidak terdaftar.';
-                    return back()->withErrors(['error' => $msg]);
+
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $user->password)) {
-                    return back()->withErrors(['error' => 'Password salah untuk Penitip.']);
+                    return response()->json(['error' => 'Password salah untuk Penitip.'], 422);
                 }
 
                 Auth::guard('penitip')->login($user);
                 $request->session()->regenerate();
                 Log::info('✅ Penitip login', ['email' => $user->email]);
-                return redirect()->route('dashboard.penitip');
+
+                return response()->json([
+                    'success' => true,
+                    'redirect_page' => route('dashboard.penitip')
+                ]);
 
             // =================== ORGANISASI ===================
             case 'organisasi':
@@ -150,17 +178,21 @@ class LoginController extends Controller
                 $org = \App\Models\Organisasi::find($request->id_organisasi);
 
                 if (!$org) {
-                    return back()->withErrors(['error' => 'Organisasi tidak ditemukan.']);
+                    return response()->json(['error' => 'Organisasi tidak ditemukan.'], 422);
                 }
 
                 if (!Hash::check($password, $org->password)) {
-                    return back()->withErrors(['error' => 'Password salah untuk Organisasi.']);
+                    return response()->json(['error' => 'Password salah untuk Organisasi.'], 422);
                 }
 
                 Auth::guard('organisasi')->login($org);
                 $request->session()->regenerate();
                 Log::info('✅ Organisasi login', ['id_organisasi' => $org->id_organisasi]);
-                return redirect()->route('organisasi.request.index');
+
+                return response()->json([
+                    'success' => true,
+                    'redirect_page' => route('organisasi.request.index')
+                ]);
 
             // =================== PEGawai ===================
             case 'pegawai':
@@ -175,11 +207,12 @@ class LoginController extends Controller
                     $msg = $existsInOther 
                         ? 'Email terdaftar tapi bukan sebagai Pegawai.' 
                         : 'Email tidak terdaftar.';
-                    return back()->withErrors(['error' => $msg]);
+
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $pegawai->password)) {
-                    return back()->withErrors(['error' => 'Password salah untuk Pegawai.']);
+                    return response()->json(['error' => 'Password salah untuk Pegawai.'], 422);
                 }
 
                 Auth::guard('pegawai')->login($pegawai);
@@ -197,10 +230,13 @@ class LoginController extends Controller
 
                 Log::info('✅ Pegawai login', ['email' => $pegawai->email, 'jabatan' => $jabatan]);
 
-                return redirect()->route($dashboardRoutes[$jabatan] ?? 'dashboard.pegawai');
+                return response()->json([
+                    'success' => true,
+                    'redirect_page' => route($dashboardRoutes[$jabatan] ?? 'dashboard.pegawai')
+                ]);
 
             default:
-                return back()->withErrors(['error' => 'Login gagal. Periksa kembali data Anda.']);
+                return response()->json(['error' => 'Login gagal. Periksa kembali data Anda.'], 422);
         }
     }
 
@@ -349,7 +385,6 @@ class LoginController extends Controller
 
     public function loginMobile(Request $request)
     {
-        // Validasi input, semua tipe user lowercase
         $request->validate([
             'tipe_user' => 'required|in:pembeli,penitip,kurir,hunter',
             'email' => 'required|email',
@@ -362,16 +397,18 @@ class LoginController extends Controller
 
         Log::info('Login attempt', ['tipe_user' => $tipe, 'email' => $email]);
 
-        if ($tipe === 'pembeli') {
-            $user = Pembeli::where('email', $email)->first();
+        switch ($tipe) {
 
-            if (!$user) {
-                Log::info('User pembeli tidak ditemukan', ['email' => $email]);
-            } elseif ($user->status_aktif != 1) {
-                Log::info('User pembeli tidak aktif', ['email' => $email, 'status_aktif' => $user->status_aktif]);
-            } elseif ($password === $user->password) {
+            case 'pembeli':
+                $user = Pembeli::where('email', $email)->first();
+                if (!$user || !Hash::check($password, $user->password)) {
+                    Log::info('Login gagal pembeli', ['email' => $email]);
+                    throw ValidationException::withMessages(['error' => 'Email atau password salah.']);
+                }
+                if ($user->status_aktif != 1) {
+                    throw ValidationException::withMessages(['error' => 'Akun tidak aktif.']);
+                }
                 $token = $user->createToken('ReUseMart')->plainTextToken;
-                Log::info('Login pembeli sukses', ['email' => $email]);
                 return response()->json([
                     'success' => true,
                     'message' => 'Login berhasil!',
@@ -379,21 +416,17 @@ class LoginController extends Controller
                     'user' => $user,
                     'redirect_page' => 'dashboard.pembeli',
                 ]);
-            } else {
-                Log::info('Password salah pembeli', ['email' => $email]);
-            }
-        }
 
-        if ($tipe === 'penitip') {
-            $user = Penitip::where('email', $email)->first();
-
-            if (!$user) {
-                Log::info('User penitip tidak ditemukan', ['email' => $email]);
-            } elseif ($user->status_aktif != 1) {
-                Log::info('User penitip tidak aktif', ['email' => $email, 'status_aktif' => $user->status_aktif]);
-            } elseif ($password === $user->password) {
+            case 'penitip':
+                $user = Penitip::where('email', $email)->first();
+                if (!$user || !Hash::check($password, $user->password)) {
+                    Log::info('Login gagal penitip', ['email' => $email]);
+                    throw ValidationException::withMessages(['error' => 'Email atau password salah.']);
+                }
+                if ($user->status_aktif != 1) {
+                    throw ValidationException::withMessages(['error' => 'Akun tidak aktif.']);
+                }
                 $token = $user->createToken('ReUseMart')->plainTextToken;
-                Log::info('Login penitip sukses', ['email' => $email]);
                 return response()->json([
                     'success' => true,
                     'message' => 'Login berhasil!',
@@ -401,41 +434,32 @@ class LoginController extends Controller
                     'user' => $user,
                     'redirect_page' => 'dashboard.penitip',
                 ]);
-            } else {
-                Log::info('Password salah penitip', ['email' => $email]);
-            }
-        }
 
-        if ($tipe === 'kurir' || $tipe === 'hunter') {
-            $user = Pegawai::where('email', $email)
-                ->whereIn('id_jabatan', [5, 7])
-                ->first();
+            case 'kurir':
+            case 'hunter':
+                $pegawai = Pegawai::where('email', $email)
+                    ->whereIn('id_jabatan', [5, 7]) // 5 = kurir, 7 = hunter
+                    ->first();
 
-            if (!$user) {
-                Log::info('User pegawai tidak ditemukan', ['email' => $email]);
-            } elseif ($password === $user->password) {
-                $token = $user->createToken('ReUseMart')->plainTextToken;
-                $redirectPage = $user->id_jabatan == 5 ? 'dashboard.kurir' : 'dashboard.hunter';
-                Log::info('Login pegawai sukses', ['email' => $email, 'id_jabatan' => $user->id_jabatan]);
+                if (!$pegawai || !Hash::check($password, $pegawai->password)) {
+                    Log::info('Login gagal pegawai', ['email' => $email]);
+                    throw ValidationException::withMessages(['error' => 'Email atau password salah.']);
+                }
+
+                $token = $pegawai->createToken('ReUseMart')->plainTextToken;
+                $redirectPage = $pegawai->id_jabatan == 5 ? 'dashboard.kurir' : 'dashboard.hunter';
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Login berhasil!',
                     'token' => $token,
-                    'user' => $user,
+                    'user' => $pegawai,
                     'redirect_page' => $redirectPage,
                 ]);
-            } else {
-                Log::info('Password salah pegawai', ['email' => $email]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Hanya pegawai dengan id_jabatan 5 atau 7 yang bisa login.',
-                ]);
-            }
-        }
 
-        throw ValidationException::withMessages([
-            'error' => 'Email atau password salah.',
-        ]);
+            default:
+                throw ValidationException::withMessages(['error' => 'Tipe user tidak valid.']);
+        }
     }
 
     public function logoutMobile(Request $request)

@@ -88,7 +88,7 @@
             <div class="col-lg-5 mb-5 mb-lg-0 position-relative ms-auto">
                 <div class="card bg-glass">
                     <div class="card-body px-4 py-5 px-md-5">
-                    <form class="form" action="{{ url('login') }}" method="POST">
+                    <form class="form" action="{{ url('login') }}" method="POST" id="loginForm">
                         @csrf
                         <div>
                             <h4 class="mb-3 fw-bold text-start">Selamat Datang</h4>
@@ -125,7 +125,7 @@
                             <label for="floatingPassword">Kata Sandi</label>
                         </div>
 
-                        @if ($errors->any())
+                        <!-- @if ($errors->any())
                             <div class="alert alert-danger">
                                 <ul>
                                     @foreach ($errors->all() as $error)
@@ -133,9 +133,17 @@
                                     @endforeach
                                 </ul>
                             </div>
-                        @endif
+                        @endif -->
 
-                        <button type="submit" style="width:100%;" class="btn btn-dark btn-block mb-2 mt-3">Login</button>
+                        <!-- Tempat untuk error message dari server -->
+                        <div id="errorMessages" class="alert alert-danger d-none mb-2"></div>
+                        <!-- Countdown rate limit -->
+                        <div id="countdownLabel" class="text-danger mb-2"></div>
+
+                        <button type="button" id="loginButton" style="width:100%;" class="btn btn-dark btn-block mb-2 mt-3">Login</button>
+
+                        <!-- <button type="submit" style="width:100%;" class="btn btn-dark btn-block mb-2 mt-3">Login</button> -->
+
                         <div class="d-flex justify-content-center mt-2">
                             <a href="{{ url('linkForm') }}" class="link-dark" style="font-size: 17px;">Lupa Password?</a>
                         </div>
@@ -168,6 +176,55 @@
             orgWrapper.classList.add('d-none');
         }
     });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+    const form = document.getElementById('loginForm');
+const loginButton = document.getElementById('loginButton');
+const countdownLabel = document.getElementById('countdownLabel');
+const errorDiv = document.getElementById('errorMessages');
+
+// CSRF header untuk axios
+axios.defaults.headers.common['X-CSRF-TOKEN'] = form.querySelector('input[name="_token"]').value;
+
+loginButton.addEventListener('click', async function() {
+    errorDiv.classList.add('d-none'); // sembunyikan error sebelumnya
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+        const response = await axios.post(form.action, data);
+        console.log('Login sukses', response.data);
+
+        if(response.data.redirect_page) {
+            window.location.href = response.data.redirect_page;
+        }
+    } catch (err) {
+        if(err.response && err.response.status === 429) {
+            const seconds = err.response.headers['retry-after'] || 60;
+            loginButton.disabled = true;
+            let s = seconds;
+            countdownLabel.innerText = `Coba lagi dalam ${s} detik`;
+            const interval = setInterval(() => {
+                s--;
+                countdownLabel.innerText = `Coba lagi dalam ${s} detik`;
+                if(s <= 0) {
+                    clearInterval(interval);
+                    loginButton.disabled = false;
+                    countdownLabel.innerText = '';
+                }
+            }, 1000);
+        } else if(err.response && err.response.data) {
+            errorDiv.innerText = err.response.data.error || 'Login gagal';
+            errorDiv.classList.remove('d-none');
+        } else {
+            errorDiv.innerText = 'Terjadi kesalahan server';
+            errorDiv.classList.remove('d-none');
+        }
+    }
+});
 </script>
 
 </body>

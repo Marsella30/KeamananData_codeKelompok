@@ -20,7 +20,9 @@ use App\Http\Controllers\TopSellerController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\BadgeController;
 
-Route::post('/login', [LoginController::class, 'loginMobile'])->name('login');
+Route::post('/login', [LoginController::class, 'loginMobile'])
+    ->middleware('throttle:5,1')  // Maks 5 request per 1 menit per IP
+    ->name('login');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logoutMobile']);

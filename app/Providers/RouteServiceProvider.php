@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Support\Facades\RateLimiter;
 
 class RouteServiceProvider extends ServiceProvider
 {
@@ -17,9 +19,15 @@ class RouteServiceProvider extends ServiceProvider
     /**
      * Daftarkan model binding, pattern filter, dll.
      */
-    public function boot(): void
+    // public function boot(): void
+    // {
+    //     parent::boot();
+    // }
+    public function boot()
     {
-        parent::boot();
+        RateLimiter::for('login', function ($request) {
+            return Limit::perMinute(2)->by($request->ip());
+        });
     }
 
     /**

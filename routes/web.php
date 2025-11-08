@@ -46,7 +46,7 @@ Route::get('/checkout', [TransaksiController::class, 'index'])->middleware('auth
 
 Route::get('/home', [HomeController::class, 'index'])->name('home');
 Route::get('login', [LoginController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [LoginController::class, 'login']);
+Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:login');
 
 Route::get('/otp', [LoginController::class, 'showOtpForm'])->name('otp.show');
 Route::post('/otp/verify', [LoginController::class, 'verifyOtp'])->name('otp.verify');
