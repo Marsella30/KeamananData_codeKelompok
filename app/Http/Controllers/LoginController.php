@@ -59,10 +59,10 @@ class LoginController extends Controller
 
     public function login(Request $request)
     {
-        // 1. Validasi input
+        // 1. Validasi input umum
         $request->validate([
             'tipe_user' => 'required|in:pembeli,penitip,organisasi,pegawai',
-            'password' => 'required|string',
+            'password'  => 'required|string',
         ]);
 
         $tipe = $request->tipe_user;
@@ -73,21 +73,25 @@ class LoginController extends Controller
             // =================== PEMBELI ===================
             case 'pembeli':
                 $request->validate(['email' => 'required|email']);
-                // 2. Cek apakah email terdaftar
                 $user = \App\Models\Pembeli::where('email', $request->email)->first();
 
                 if (!$user) {
-                    return back()->withErrors(['error' => 'Email tidak terdaftar.']);
+                    $existsInOther = \App\Models\Penitip::where('email', $request->email)->exists()
+                                || \App\Models\Organisasi::where('email', $request->email)->exists()
+                                || \App\Models\Pegawai::where('email', $request->email)->exists();
+
+                    $msg = $existsInOther 
+                        ? 'Email terdaftar tapi bukan sebagai Pembeli.' 
+                        : 'Email tidak terdaftar.';
+                    return back()->withErrors(['error' => $msg]);
                 }
-                // 3. Cek password hash
+
                 if (!Hash::check($password, $user->password)) {
-                    return back()->withErrors(['error' => 'Password salah.']);
+                    return back()->withErrors(['error' => 'Password salah untuk Pembeli.']);
                 }
 
                 // Generate OTP
                 $otp = rand(100000, 999999);
-
-                // 5. Simpan OTP ke database (langsung lewat DB agar pasti tersimpan)
                 try {
                     \DB::table('pembeli')
                         ->where('id_pembeli', $user->id_pembeli)
@@ -95,27 +99,23 @@ class LoginController extends Controller
                             'otp_code' => $otp,
                             'otp_expires_at' => now()->addMinutes(5),
                         ]);
-
-                    Log::info('✅ OTP tersimpan ke DB', ['email' => $user->email, 'otp' => $otp]);
+                    Log::info('✅ OTP tersimpan', ['email' => $user->email, 'otp' => $otp]);
                 } catch (\Throwable $e) {
                     Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
                     return back()->withErrors(['error' => 'Terjadi kesalahan saat menyimpan OTP.']);
                 }
 
-                // 6. Kirim OTP ke email (jika gagal, tidak rollback)
                 try {
                     Mail::to($user->email)->send(new OtpMail($otp));
                 } catch (\Throwable $e) {
-                    Log::error('⚠️ Gagal mengirim email OTP: '.$e->getMessage());
+                    Log::error('⚠️ Gagal kirim OTP: '.$e->getMessage());
                 }
 
-                // 7. Simpan data sementara untuk verifikasi OTP nanti
                 session([
                     'pending_email' => $user->email,
-                    'pending_role' => 'pembeli',
+                    'pending_role'  => 'pembeli',
                 ]);
 
-                // 8. Arahkan ke halaman verifikasi OTP
                 return redirect()->route('otp.show')
                     ->with('info', 'Kode OTP telah dikirim ke email Anda dan berlaku 5 menit.');
 
@@ -125,18 +125,23 @@ class LoginController extends Controller
                 $user = \App\Models\Penitip::where('email', $request->email)->first();
 
                 if (!$user) {
-                    return back()->withErrors(['error' => 'Email tidak terdaftar.']);
+                    $existsInOther = \App\Models\Pembeli::where('email', $request->email)->exists()
+                                || \App\Models\Organisasi::where('email', $request->email)->exists()
+                                || \App\Models\Pegawai::where('email', $request->email)->exists();
+
+                    $msg = $existsInOther 
+                        ? 'Email terdaftar tapi bukan sebagai Penitip.' 
+                        : 'Email tidak terdaftar.';
+                    return back()->withErrors(['error' => $msg]);
                 }
 
                 if (!Hash::check($password, $user->password)) {
-                    return back()->withErrors(['error' => 'Password salah.']);
+                    return back()->withErrors(['error' => 'Password salah untuk Penitip.']);
                 }
 
                 Auth::guard('penitip')->login($user);
                 $request->session()->regenerate();
-
                 Log::info('✅ Penitip login', ['email' => $user->email]);
-
                 return redirect()->route('dashboard.penitip');
 
             // =================== ORGANISASI ===================
@@ -149,25 +154,32 @@ class LoginController extends Controller
                 }
 
                 if (!Hash::check($password, $org->password)) {
-                    return back()->withErrors(['error' => 'Password salah.']);
+                    return back()->withErrors(['error' => 'Password salah untuk Organisasi.']);
                 }
 
                 Auth::guard('organisasi')->login($org);
                 $request->session()->regenerate();
-
                 Log::info('✅ Organisasi login', ['id_organisasi' => $org->id_organisasi]);
-
                 return redirect()->route('organisasi.request.index');
 
             // =================== PEGawai ===================
             case 'pegawai':
-                $request->validate([
-                    'email' => 'required|email',
-                ]);
+                $request->validate(['email' => 'required|email']);
                 $pegawai = \App\Models\Pegawai::where('email', $request->email)->first();
 
-                if (!$pegawai || !Hash::check($password, $pegawai->password)) {
-                    return back()->withErrors(['error' => 'Email atau password salah.']);
+                if (!$pegawai) {
+                    $existsInOther = \App\Models\Pembeli::where('email', $request->email)->exists()
+                                || \App\Models\Penitip::where('email', $request->email)->exists()
+                                || \App\Models\Organisasi::where('email', $request->email)->exists();
+
+                    $msg = $existsInOther 
+                        ? 'Email terdaftar tapi bukan sebagai Pegawai.' 
+                        : 'Email tidak terdaftar.';
+                    return back()->withErrors(['error' => $msg]);
+                }
+
+                if (!Hash::check($password, $pegawai->password)) {
+                    return back()->withErrors(['error' => 'Password salah untuk Pegawai.']);
                 }
 
                 Auth::guard('pegawai')->login($pegawai);
@@ -182,6 +194,8 @@ class LoginController extends Controller
                     'pegawai gudang' => 'dashboard.pegawai_gudang',
                     'customer service' => 'dashboard.cs',
                 ];
+
+                Log::info('✅ Pegawai login', ['email' => $pegawai->email, 'jabatan' => $jabatan]);
 
                 return redirect()->route($dashboardRoutes[$jabatan] ?? 'dashboard.pegawai');
 
