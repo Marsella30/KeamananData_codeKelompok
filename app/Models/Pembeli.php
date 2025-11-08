@@ -36,6 +36,8 @@ class Pembeli extends Authenticatable
 
 	protected $table = 'pembeli';
 	protected $primaryKey = 'id_pembeli';
+	public $incrementing = true; // 👈 tambahkan ini
+	protected $keyType = 'int';
 	public $timestamps = false;
 
 	protected $casts = [
@@ -55,7 +57,9 @@ class Pembeli extends Authenticatable
 		'notelp',
 		'nama_pembeli',
 		'status_aktif',
-		'fcm_token'
+		'fcm_token',
+		'otp_code',
+    	'otp_expires_at'
 	];
 
 	public function alamat_pembelis()

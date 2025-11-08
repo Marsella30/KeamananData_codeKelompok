@@ -11,6 +11,8 @@ use App\Models\Penjadwalan;
 use App\Models\Rating;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class PembeliController extends Controller
@@ -64,11 +66,11 @@ class PembeliController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'nama_pembeli' => 'required',
-            'username' =>'required',
-            'notelp' =>'required',
-            'email' =>'required',
-            'password'=>'required',
+            'nama_pembeli' => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:pembeli,username',
+            'notelp' => 'required|string|max:15',
+            'email' => 'required|email|unique:pembeli,email',
+            'password' => 'required|min:6',
         ]);
 
         Pembeli::create([
@@ -76,14 +78,14 @@ class PembeliController extends Controller
             'username' => $request->username,
             'notelp' => $request->notelp,
             'email' => $request->email,
-            'password' => $request->password,
+            'password' => Hash::make($request->password), // 🔐 hash password
             'poin' => 0,
-            'status_aktif' => 1,
+            'status_aktif' => 1, // langsung aktif
         ]);
 
         return redirect()
             ->route('login')
-            ->with('success', 'Pembeli berhasil dibuat.');
+            ->with('success', 'Akun berhasil dibuat, silakan login.');
     }
 
     public function riwayatTransaksi(Request $request)

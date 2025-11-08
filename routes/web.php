@@ -48,6 +48,9 @@ Route::get('/home', [HomeController::class, 'index'])->name('home');
 Route::get('login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [LoginController::class, 'login']);
 
+Route::get('/otp', [LoginController::class, 'showOtpForm'])->name('otp.show');
+Route::post('/otp/verify', [LoginController::class, 'verifyOtp'])->name('otp.verify');
+
 Route::get('/penitip/{id_penitip}/rating', [PenitipController::class, 'showRating'])->name('penitip.rating');
 // Route::get('/pembayaran/{id_transaksi}', [PembayaranController::class, 'showPembayaran'])->name('pembayaran');
 
