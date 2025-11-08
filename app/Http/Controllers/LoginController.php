@@ -80,6 +80,14 @@ class LoginController extends Controller
         $tipe = $request->tipe_user;
         $password = $request->password;
 
+        // Log percobaan login
+        Log::info('Login attempt (web)', [
+            'tipe_user' => $tipe,
+            'email' => $request->email ?? 'N/A',
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
         switch ($tipe) {
 
             // =================== PEMBELI ===================
@@ -91,19 +99,43 @@ class LoginController extends Controller
                 $user = \App\Models\Pembeli::where('email', $request->email)->first();
 
                 if (!$user) {
-                    $existsInOther = \App\Models\Penitip::where('email', $request->email)->exists()
-                                || \App\Models\Organisasi::where('email', $request->email)->exists()
-                                || \App\Models\Pegawai::where('email', $request->email)->exists();
+                    // Cek email di tabel lain
+                    $existsPenitip = Penitip::where('email', $request->email)->exists();
+                    $existsOrganisasi = Organisasi::where('email', $request->email)->exists();
+                    $existsPegawai = Pegawai::where('email', $request->email)->exists();
 
-                    $msg = $existsInOther 
-                        ? 'Email terdaftar tapi bukan sebagai Pembeli.' 
+                    // Logging debug
+                    Log::info('Cek email di tabel lain', [
+                        'penitip' => $existsPenitip,
+                        'organisasi' => $existsOrganisasi,
+                        'pegawai' => $existsPegawai,
+                    ]);
+
+                    // Tentukan pesan error
+                    $msg = ($existsPenitip || $existsOrganisasi || $existsPegawai)
+                        ? 'Email terdaftar tapi bukan sebagai Pembeli.'
                         : 'Email tidak terdaftar.';
+
+                    // Logging gagal login
+                    Log::warning('Login gagal (web) - pembeli', [
+                        'email' => $request->email,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
 
                     return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $user->password)) {
-                    return response()->json(['error' => 'Password salah untuk Pembeli.'], 422);
+                    $msg = 'Password salah untuk Pembeli.';
+                    Log::warning('Login gagal (web) - pembeli', [
+                        'email' => $request->email,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 // Generate OTP 6 digit
@@ -136,6 +168,8 @@ class LoginController extends Controller
                     'pending_role'  => 'pembeli',
                 ]);
 
+                Log::info('Login sukses (web) - pembeli', ['email' => $user->email]);
+
                 return response()->json([
                     'success' => true,
                     'redirect_page' => route('otp.show'),
@@ -145,27 +179,38 @@ class LoginController extends Controller
             // =================== PENITIP ===================
             case 'penitip':
                 $request->validate(['email' => 'required|email']);
-                $user = \App\Models\Penitip::where('email', $request->email)->first();
+                $user = Penitip::where('email', $request->email)->first();
 
                 if (!$user) {
-                    $existsInOther = \App\Models\Pembeli::where('email', $request->email)->exists()
-                                || \App\Models\Organisasi::where('email', $request->email)->exists()
-                                || \App\Models\Pegawai::where('email', $request->email)->exists();
+                    $msg = Pembeli::where('email', $request->email)->exists() ||
+                           Organisasi::where('email', $request->email)->exists() ||
+                           Pegawai::where('email', $request->email)->exists()
+                           ? 'Email terdaftar tapi bukan sebagai Penitip.'
+                           : 'Email tidak terdaftar.';
 
-                    $msg = $existsInOther 
-                        ? 'Email terdaftar tapi bukan sebagai Penitip.' 
-                        : 'Email tidak terdaftar.';
-
+                    Log::warning('Login gagal (web) - penitip', [
+                        'email' => $request->email,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
                     return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $user->password)) {
-                    return response()->json(['error' => 'Password salah untuk Penitip.'], 422);
+                    $msg = 'Password salah untuk Penitip.';
+                    Log::warning('Login gagal (web) - penitip', [
+                        'email' => $request->email,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 Auth::guard('penitip')->login($user);
                 $request->session()->regenerate();
-                Log::info('✅ Penitip login', ['email' => $user->email]);
+                Log::info('Login sukses (web) - penitip', ['email' => $user->email]);
 
                 return response()->json([
                     'success' => true,
@@ -175,19 +220,33 @@ class LoginController extends Controller
             // =================== ORGANISASI ===================
             case 'organisasi':
                 $request->validate(['id_organisasi' => 'required|exists:organisasi,id_organisasi']);
-                $org = \App\Models\Organisasi::find($request->id_organisasi);
+                $org = Organisasi::find($request->id_organisasi);
 
                 if (!$org) {
-                    return response()->json(['error' => 'Organisasi tidak ditemukan.'], 422);
+                    $msg = 'Organisasi tidak ditemukan.';
+                    Log::warning('Login gagal (web) - organisasi', [
+                        'id_organisasi' => $request->id_organisasi,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $org->password)) {
-                    return response()->json(['error' => 'Password salah untuk Organisasi.'], 422);
+                    $msg = 'Password salah untuk Organisasi.';
+                    Log::warning('Login gagal (web) - organisasi', [
+                        'id_organisasi' => $request->id_organisasi,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 Auth::guard('organisasi')->login($org);
                 $request->session()->regenerate();
-                Log::info('✅ Organisasi login', ['id_organisasi' => $org->id_organisasi]);
+                Log::info('Login sukses (web) - organisasi', ['id_organisasi' => $org->id_organisasi]);
 
                 return response()->json([
                     'success' => true,
@@ -197,22 +256,33 @@ class LoginController extends Controller
             // =================== PEGawai ===================
             case 'pegawai':
                 $request->validate(['email' => 'required|email']);
-                $pegawai = \App\Models\Pegawai::where('email', $request->email)->first();
+                $pegawai = Pegawai::where('email', $request->email)->first();
 
                 if (!$pegawai) {
-                    $existsInOther = \App\Models\Pembeli::where('email', $request->email)->exists()
-                                || \App\Models\Penitip::where('email', $request->email)->exists()
-                                || \App\Models\Organisasi::where('email', $request->email)->exists();
+                    $msg = Pembeli::where('email', $request->email)->exists() ||
+                           Penitip::where('email', $request->email)->exists() ||
+                           Organisasi::where('email', $request->email)->exists()
+                           ? 'Email terdaftar tapi bukan sebagai Pegawai.'
+                           : 'Email tidak terdaftar.';
 
-                    $msg = $existsInOther 
-                        ? 'Email terdaftar tapi bukan sebagai Pegawai.' 
-                        : 'Email tidak terdaftar.';
-
+                    Log::warning('Login gagal (web) - pegawai', [
+                        'email' => $request->email,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
                     return response()->json(['error' => $msg], 422);
                 }
 
                 if (!Hash::check($password, $pegawai->password)) {
-                    return response()->json(['error' => 'Password salah untuk Pegawai.'], 422);
+                    $msg = 'Password salah untuk Pegawai.';
+                    Log::warning('Login gagal (web) - pegawai', [
+                        'email' => $request->email,
+                        'reason' => $msg,
+                        'ip' => $request->ip(),
+                        'user_agent' => $request->userAgent(),
+                    ]);
+                    return response()->json(['error' => $msg], 422);
                 }
 
                 Auth::guard('pegawai')->login($pegawai);
@@ -228,7 +298,7 @@ class LoginController extends Controller
                     'customer service' => 'dashboard.cs',
                 ];
 
-                Log::info('✅ Pegawai login', ['email' => $pegawai->email, 'jabatan' => $jabatan]);
+                Log::info('Login sukses (web) - pegawai', ['email' => $pegawai->email, 'jabatan' => $jabatan]);
 
                 return response()->json([
                     'success' => true,
@@ -236,7 +306,13 @@ class LoginController extends Controller
                 ]);
 
             default:
-                return response()->json(['error' => 'Login gagal. Periksa kembali data Anda.'], 422);
+                $msg = 'Login gagal. Periksa kembali data Anda.';
+                Log::warning('Login gagal (web) - unknown type', [
+                    'tipe_user' => $tipe,
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+                return response()->json(['error' => $msg], 422);
         }
     }
 
@@ -395,20 +471,27 @@ class LoginController extends Controller
         $email = $request->email;
         $password = trim($request->password);
 
-        Log::info('Login attempt', ['tipe_user' => $tipe, 'email' => $email]);
+        // Log percobaan login API
+        Log::info('Login attempt (API)', [
+            'tipe_user' => $tipe,
+            'email' => $email,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         switch ($tipe) {
-
             case 'pembeli':
                 $user = Pembeli::where('email', $email)->first();
                 if (!$user || !Hash::check($password, $user->password)) {
-                    Log::info('Login gagal pembeli', ['email' => $email]);
+                    Log::warning('Login gagal (API) - pembeli', ['email' => $email, 'reason' => 'Email/password salah', 'ip' => $request->ip()]);
                     throw ValidationException::withMessages(['error' => 'Email atau password salah.']);
                 }
                 if ($user->status_aktif != 1) {
+                    Log::warning('Login gagal (API) - pembeli', ['email' => $email, 'reason' => 'Akun tidak aktif', 'ip' => $request->ip()]);
                     throw ValidationException::withMessages(['error' => 'Akun tidak aktif.']);
                 }
                 $token = $user->createToken('ReUseMart')->plainTextToken;
+                Log::info('Login sukses (API) - pembeli', ['email' => $email, 'ip' => $request->ip()]);
                 return response()->json([
                     'success' => true,
                     'message' => 'Login berhasil!',
@@ -420,13 +503,15 @@ class LoginController extends Controller
             case 'penitip':
                 $user = Penitip::where('email', $email)->first();
                 if (!$user || !Hash::check($password, $user->password)) {
-                    Log::info('Login gagal penitip', ['email' => $email]);
+                    Log::warning('Login gagal (API) - penitip', ['email' => $email, 'reason' => 'Email/password salah', 'ip' => $request->ip()]);
                     throw ValidationException::withMessages(['error' => 'Email atau password salah.']);
                 }
                 if ($user->status_aktif != 1) {
+                    Log::warning('Login gagal (API) - penitip', ['email' => $email, 'reason' => 'Akun tidak aktif', 'ip' => $request->ip()]);
                     throw ValidationException::withMessages(['error' => 'Akun tidak aktif.']);
                 }
                 $token = $user->createToken('ReUseMart')->plainTextToken;
+                Log::info('Login sukses (API) - penitip', ['email' => $email, 'ip' => $request->ip()]);
                 return response()->json([
                     'success' => true,
                     'message' => 'Login berhasil!',
@@ -438,16 +523,17 @@ class LoginController extends Controller
             case 'kurir':
             case 'hunter':
                 $pegawai = Pegawai::where('email', $email)
-                    ->whereIn('id_jabatan', [5, 7]) // 5 = kurir, 7 = hunter
+                    ->whereIn('id_jabatan', [5, 7])
                     ->first();
 
                 if (!$pegawai || !Hash::check($password, $pegawai->password)) {
-                    Log::info('Login gagal pegawai', ['email' => $email]);
+                    Log::warning('Login gagal (API) - pegawai', ['email' => $email, 'reason' => 'Email/password salah', 'ip' => $request->ip()]);
                     throw ValidationException::withMessages(['error' => 'Email atau password salah.']);
                 }
 
                 $token = $pegawai->createToken('ReUseMart')->plainTextToken;
                 $redirectPage = $pegawai->id_jabatan == 5 ? 'dashboard.kurir' : 'dashboard.hunter';
+                Log::info('Login sukses (API) - pegawai', ['email' => $email, 'jabatan' => $pegawai->id_jabatan, 'ip' => $request->ip()]);
 
                 return response()->json([
                     'success' => true,
@@ -458,6 +544,7 @@ class LoginController extends Controller
                 ]);
 
             default:
+                Log::warning('Login gagal (API) - tipe user invalid', ['tipe_user' => $tipe, 'ip' => $request->ip()]);
                 throw ValidationException::withMessages(['error' => 'Tipe user tidak valid.']);
         }
     }
