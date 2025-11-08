@@ -28,14 +28,14 @@ class OrganisasiController extends Controller
             'nama_organisasi' => 'required|string|max:255',
             'alamat'          => 'required|string|max:255',
             'password'        => 'required|string|min:6',
-            'email'           => 'required',
+            'email'           => 'required|email|unique:organisasi,email',
         ]);
 
         Organisasi::create([
             'nama_organisasi' => $request->nama_organisasi,
             'alamat'          => $request->alamat,
             'email'           => $request->email,
-            'password'        => $request->password,
+            'password'        => Hash::make($request->password), // 🔐 hash password
             'status_aktif'    => 1,
         ]);
 

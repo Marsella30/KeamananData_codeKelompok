@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Pegawai;
 use App\Models\Jabatan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class PegawaiController extends Controller
 {
@@ -26,21 +27,25 @@ class PegawaiController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'nama_pegawai' => 'required|string',
-            'username' => 'required|string|unique:pegawai,username',
-            'email' => 'required|email|unique:pegawai,email',
-            'password' => 'required|string|min:6',
-            'notelp' => 'required|string',
-            'tanggal_lahir' => 'required|date',
-            'id_jabatan' => 'required|exists:jabatan,id_jabatan'
+            'nama_pegawai'   => 'required|string',
+            'username'       => 'required|string|unique:pegawai,username',
+            'email'          => 'required|email|unique:pegawai,email',
+            'password'       => 'required|string|min:6',
+            'notelp'         => 'required|string',
+            'tanggal_lahir'  => 'required|date',
+            'id_jabatan'     => 'required|exists:jabatan,id_jabatan'
         ]);
 
         $data = $request->all();
         $data['status_aktif'] = 1;
 
+        // 🔐 Hash password sebelum disimpan
+        $data['password'] = Hash::make($request->password);
+
         Pegawai::create($data);
 
-        return redirect()->route('pegawai.index')->with('success', 'Pegawai berhasil ditambahkan.');
+        return redirect()->route('pegawai.index')
+            ->with('success', 'Pegawai berhasil ditambahkan.');
     }
 
     // Menampilkan form edit pegawai

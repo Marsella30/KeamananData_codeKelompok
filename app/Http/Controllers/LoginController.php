@@ -59,10 +59,7 @@ class LoginController extends Controller
 
     public function login(Request $request)
     {
-        \DB::listen(function ($query) {
-            \Log::info('SQL', [$query->sql, $query->bindings]);
-        });
-
+        // 1. Validasi input
         $request->validate([
             'tipe_user' => 'required|in:pembeli,penitip,organisasi,pegawai',
             'password' => 'required|string',
@@ -71,126 +68,264 @@ class LoginController extends Controller
         $tipe = $request->tipe_user;
         $password = $request->password;
 
-        if ($tipe === 'pembeli') {
-            // 1. Validasi input
-            $request->validate([
-                'email' => 'required|email',
-                'password' => 'required',
-            ]);
+        switch ($tipe) {
 
-            // 2. Cek apakah email terdaftar
-            $user = \App\Models\Pembeli::where('email', $request->email)->first();
-            if (!$user) {
-                return back()->withErrors(['error' => 'Email tidak terdaftar.']);
-            }
+            // =================== PEMBELI ===================
+            case 'pembeli':
+                $request->validate(['email' => 'required|email']);
+                // 2. Cek apakah email terdaftar
+                $user = \App\Models\Pembeli::where('email', $request->email)->first();
 
-            // 3. Cek password hash
-            if (!Hash::check($password, $user->password)) {
-                return back()->withErrors(['error' => 'Password salah.']);
-            }
+                if (!$user) {
+                    return back()->withErrors(['error' => 'Email tidak terdaftar.']);
+                }
+                // 3. Cek password hash
+                if (!Hash::check($password, $user->password)) {
+                    return back()->withErrors(['error' => 'Password salah.']);
+                }
 
-            // 4. Generate OTP 6 digit
-            $otp = rand(100000, 999999);
+                // Generate OTP
+                $otp = rand(100000, 999999);
 
-            // 5. Simpan OTP ke database (langsung lewat DB agar pasti tersimpan)
-            try {
-                \DB::table('pembeli')
-                    ->where('id_pembeli', $user->id_pembeli)
-                    ->update([
-                        'otp_code' => $otp,
-                        'otp_expires_at' => now()->addMinutes(5),
-                    ]);
+                // 5. Simpan OTP ke database (langsung lewat DB agar pasti tersimpan)
+                try {
+                    \DB::table('pembeli')
+                        ->where('id_pembeli', $user->id_pembeli)
+                        ->update([
+                            'otp_code' => $otp,
+                            'otp_expires_at' => now()->addMinutes(5),
+                        ]);
 
-                Log::info('✅ OTP tersimpan ke DB', [
-                    'email' => $user->email,
-                    'otp' => $otp,
+                    Log::info('✅ OTP tersimpan ke DB', ['email' => $user->email, 'otp' => $otp]);
+                } catch (\Throwable $e) {
+                    Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
+                    return back()->withErrors(['error' => 'Terjadi kesalahan saat menyimpan OTP.']);
+                }
+
+                // 6. Kirim OTP ke email (jika gagal, tidak rollback)
+                try {
+                    Mail::to($user->email)->send(new OtpMail($otp));
+                } catch (\Throwable $e) {
+                    Log::error('⚠️ Gagal mengirim email OTP: '.$e->getMessage());
+                }
+
+                // 7. Simpan data sementara untuk verifikasi OTP nanti
+                session([
+                    'pending_email' => $user->email,
+                    'pending_role' => 'pembeli',
                 ]);
-            } catch (\Throwable $e) {
-                Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
-                return back()->withErrors(['error' => 'Terjadi kesalahan saat menyimpan OTP.']);
-            }
 
-            // 6. Kirim OTP ke email (jika gagal, tidak rollback)
-            try {
-                Mail::to($user->email)->send(new OtpMail($otp));
-            } catch (\Throwable $e) {
-                Log::error('⚠️ Gagal mengirim email OTP: '.$e->getMessage());
-                // Tetap lanjut agar user bisa input OTP manual
-            }
+                // 8. Arahkan ke halaman verifikasi OTP
+                return redirect()->route('otp.show')
+                    ->with('info', 'Kode OTP telah dikirim ke email Anda dan berlaku 5 menit.');
 
-            // 7. Simpan data sementara untuk verifikasi OTP nanti
-            session([
-                'pending_email' => $user->email,
-                'pending_role' => 'pembeli',
-            ]);
+            // =================== PENITIP ===================
+            case 'penitip':
+                $request->validate(['email' => 'required|email']);
+                $user = \App\Models\Penitip::where('email', $request->email)->first();
 
-            // 8. Arahkan ke halaman verifikasi OTP
-            return redirect()
-                ->route('otp.show')
-                ->with('info', 'Kode OTP telah dikirim ke email Anda dan berlaku selama 5 menit.');
-        }
+                if (!$user) {
+                    return back()->withErrors(['error' => 'Email tidak terdaftar.']);
+                }
 
-        if ($tipe === 'penitip') {
-            $request->validate(['email' => 'required|email']);
-            $user = \App\Models\Penitip::where('email', $request->email)->first();
-            if ($user && $user->password === $password) {
+                if (!Hash::check($password, $user->password)) {
+                    return back()->withErrors(['error' => 'Password salah.']);
+                }
+
                 Auth::guard('penitip')->login($user);
                 $request->session()->regenerate();
-                return redirect()->route('dashboard.penitip');
-                // return redirect()->route('home');
-            }
-        }
 
-        if ($tipe === 'organisasi') {
-            $request->validate(['id_organisasi' => 'required|exists:organisasi,id_organisasi']);
-            $org = \App\Models\Organisasi::find($request->id_organisasi);
-            if ($org && $org->password === $password) {
+                Log::info('✅ Penitip login', ['email' => $user->email]);
+
+                return redirect()->route('dashboard.penitip');
+
+            // =================== ORGANISASI ===================
+            case 'organisasi':
+                $request->validate(['id_organisasi' => 'required|exists:organisasi,id_organisasi']);
+                $org = \App\Models\Organisasi::find($request->id_organisasi);
+
+                if (!$org) {
+                    return back()->withErrors(['error' => 'Organisasi tidak ditemukan.']);
+                }
+
+                if (!Hash::check($password, $org->password)) {
+                    return back()->withErrors(['error' => 'Password salah.']);
+                }
+
                 Auth::guard('organisasi')->login($org);
                 $request->session()->regenerate();
-                return redirect()->route('organisasi.request.index');
-                // return redirect()->route('dashboard.organisasi');
-            }
-        }
 
-        if ($tipe === 'pegawai') {
-            $request->validate([
-                'email' => 'required|email',
-                'password' => 'required|string',
-            ]);
-        
-            $pegawai = \App\Models\Pegawai::where('email', $request->email)->first();
-        
-            if ($pegawai && $pegawai->password === $request->password) {
+                Log::info('✅ Organisasi login', ['id_organisasi' => $org->id_organisasi]);
+
+                return redirect()->route('organisasi.request.index');
+
+            // =================== PEGawai ===================
+            case 'pegawai':
+                $request->validate([
+                    'email' => 'required|email',
+                ]);
+                $pegawai = \App\Models\Pegawai::where('email', $request->email)->first();
+
+                if (!$pegawai || !Hash::check($password, $pegawai->password)) {
+                    return back()->withErrors(['error' => 'Email atau password salah.']);
+                }
+
                 Auth::guard('pegawai')->login($pegawai);
                 $request->session()->regenerate();
-        
+
                 $jabatan = strtolower(trim($pegawai->jabatan->nama_jabatan));
-        
-                switch ($jabatan) {
-                    case 'admin':
-                        return redirect()->route('dashboard.admin');
-                    case 'kurir':
-                        return redirect()->route('dashboard.kurir');
-                    case 'owner':
-                        return redirect()->route('dashboard.owner');
-                        // return redirect()->route('dashboard.pembeli');
-                    case 'kepala gudang':
-                        return redirect()->route('dashboard.kepala_gudang');
-                    case 'pegawai gudang':
-                        return redirect()->route('dashboard.pegawai_gudang');
-                    case 'customer service':
-                        return redirect()->route('dashboard.cs');
-                    default:
-                        return redirect()->route('dashboard.pegawai');
-                }
-            }
-        
-            return back()->withErrors(['error' => 'Email atau password salah.']);
+                $dashboardRoutes = [
+                    'admin' => 'dashboard.admin',
+                    'kurir' => 'dashboard.kurir',
+                    'owner' => 'dashboard.owner',
+                    'kepala gudang' => 'dashboard.kepala_gudang',
+                    'pegawai gudang' => 'dashboard.pegawai_gudang',
+                    'customer service' => 'dashboard.cs',
+                ];
+
+                return redirect()->route($dashboardRoutes[$jabatan] ?? 'dashboard.pegawai');
+
+            default:
+                return back()->withErrors(['error' => 'Login gagal. Periksa kembali data Anda.']);
         }
+    }
+
+    // public function login(Request $request)
+    // {
+    //     \DB::listen(function ($query) {
+    //         \Log::info('SQL', [$query->sql, $query->bindings]);
+    //     });
+
+    //     $request->validate([
+    //         'tipe_user' => 'required|in:pembeli,penitip,organisasi,pegawai',
+    //         'password' => 'required|string',
+    //     ]);
+
+    //     $tipe = $request->tipe_user;
+    //     $password = $request->password;
+
+    //     if ($tipe === 'pembeli') {
+    //         // 1. Validasi input
+    //         $request->validate([
+    //             'email' => 'required|email',
+    //             'password' => 'required',
+    //         ]);
+
+    //         // 2. Cek apakah email terdaftar
+    //         $user = \App\Models\Pembeli::where('email', $request->email)->first();
+    //         if (!$user) {
+    //             return back()->withErrors(['error' => 'Email tidak terdaftar.']);
+    //         }
+
+    //         // 3. Cek password hash
+    //         if (!Hash::check($password, $user->password)) {
+    //             return back()->withErrors(['error' => 'Password salah.']);
+    //         }
+
+    //         // 4. Generate OTP 6 digit
+    //         $otp = rand(100000, 999999);
+
+    //         // 5. Simpan OTP ke database (langsung lewat DB agar pasti tersimpan)
+    //         try {
+    //             \DB::table('pembeli')
+    //                 ->where('id_pembeli', $user->id_pembeli)
+    //                 ->update([
+    //                     'otp_code' => $otp,
+    //                     'otp_expires_at' => now()->addMinutes(5),
+    //                 ]);
+
+    //             Log::info('✅ OTP tersimpan ke DB', [
+    //                 'email' => $user->email,
+    //                 'otp' => $otp,
+    //             ]);
+    //         } catch (\Throwable $e) {
+    //             Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
+    //             return back()->withErrors(['error' => 'Terjadi kesalahan saat menyimpan OTP.']);
+    //         }
+
+    //         // 6. Kirim OTP ke email (jika gagal, tidak rollback)
+    //         try {
+    //             Mail::to($user->email)->send(new OtpMail($otp));
+    //         } catch (\Throwable $e) {
+    //             Log::error('⚠️ Gagal mengirim email OTP: '.$e->getMessage());
+    //             // Tetap lanjut agar user bisa input OTP manual
+    //         }
+
+    //         // 7. Simpan data sementara untuk verifikasi OTP nanti
+    //         session([
+    //             'pending_email' => $user->email,
+    //             'pending_role' => 'pembeli',
+    //         ]);
+
+    //         // 8. Arahkan ke halaman verifikasi OTP
+    //         return redirect()
+    //             ->route('otp.show')
+    //             ->with('info', 'Kode OTP telah dikirim ke email Anda dan berlaku selama 5 menit.');
+    //     }
+
+    //     if ($tipe === 'penitip') {
+    //         $request->validate(['email' => 'required|email']);
+    //         $user = \App\Models\Penitip::where('email', $request->email)->first();
+
+    //         if ($user && Hash::check($password, $user->password)) {
+    //             Auth::guard('penitip')->login($user);
+    //             $request->session()->regenerate();
+    //             return redirect()->route('dashboard.penitip');
+    //         }
+
+    //         return back()->withErrors(['error' => 'Email atau password salah.']);
+    //     }
+
+    //     if ($tipe === 'organisasi') {
+    //         $request->validate(['id_organisasi' => 'required|exists:organisasi,id_organisasi']);
+    //         $org = \App\Models\Organisasi::find($request->id_organisasi);
+    //         if ($org && $org->password === $password) {
+    //             Auth::guard('organisasi')->login($org);
+    //             $request->session()->regenerate();
+    //             return redirect()->route('organisasi.request.index');
+    //             // return redirect()->route('dashboard.organisasi');
+    //         }
+    //     }
+
+    //     if ($tipe === 'pegawai') {
+    //         $request->validate([
+    //             'email' => 'required|email',
+    //             'password' => 'required|string',
+    //         ]);
+        
+    //         $pegawai = \App\Models\Pegawai::where('email', $request->email)->first();
+        
+    //         if ($pegawai && $pegawai->password === $request->password) {
+    //             Auth::guard('pegawai')->login($pegawai);
+    //             $request->session()->regenerate();
+        
+    //             $jabatan = strtolower(trim($pegawai->jabatan->nama_jabatan));
+        
+    //             switch ($jabatan) {
+    //                 case 'admin':
+    //                     return redirect()->route('dashboard.admin');
+    //                 case 'kurir':
+    //                     return redirect()->route('dashboard.kurir');
+    //                 case 'owner':
+    //                     return redirect()->route('dashboard.owner');
+    //                     // return redirect()->route('dashboard.pembeli');
+    //                 case 'kepala gudang':
+    //                     return redirect()->route('dashboard.kepala_gudang');
+    //                 case 'pegawai gudang':
+    //                     return redirect()->route('dashboard.pegawai_gudang');
+    //                 case 'customer service':
+    //                     return redirect()->route('dashboard.cs');
+    //                 default:
+    //                     return redirect()->route('dashboard.pegawai');
+    //             }
+    //         }
+        
+    //         return back()->withErrors(['error' => 'Email atau password salah.']);
+    //     }
         
 
-        return back()->withErrors(['error' => 'Login gagal. Periksa kembali data Anda.']);
-    }
+    //     return back()->withErrors(['error' => 'Login gagal. Periksa kembali data Anda.']);
+    // }
 
     public function logout()
     {

@@ -189,6 +189,8 @@ class PenitipController extends Controller
         $data['saldo_penitip'] = 0;
         $data['status_aktif'] = 1;
 
+        $data['password'] = Hash::make($request->password); // 🔐 hash password
+
         Penitip::create($data);
 
         return redirect()->route('cs.penitip.index')->with('success', 'Penitip berhasil ditambahkan.');

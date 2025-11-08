@@ -32,53 +32,40 @@ class PasswordController extends Controller
     {
         $request->validate([
             'tipe_user' => 'required|in:pembeli,penitip,organisasi',
-            'password' => 'required',
+            'password' => 'required|min:6',
+            'email'    => 'required|email',
         ]);
 
         $tipe = $request->tipe_user;
 
-        if($tipe === 'pembeli'){
-            $request->validate(['email' => 'required|email']);
+        switch($tipe){
+            case 'pembeli':
+                $user = Pembeli::where('email', $request->email)->first();
+                break;
 
-            $pembeli = Pembeli::where('email', $request->email)->first();
+            case 'penitip':
+                $user = Penitip::where('email', $request->email)->first();
+                break;
 
-            $pembeli->update([
-                'password' => $request->password,
-            ]);
+            case 'organisasi':
+                $user = Organisasi::where('email', $request->email)->first();
+                break;
 
-            return redirect()
-            ->route('login')
-            ->with('success', 'Berhasil Ubah Password.');
-        }
-        
-        if($tipe === 'penitip'){
-            $request->validate(['email' => 'required|email']);
-
-            $penitip = Penitip::where('email', $request->email)->first();
-
-            $penitip->update([
-                'password' => $request->password,
-            ]);
-
-            return redirect()
-            ->route('login')
-            ->with('success', 'Berhasil Ubah Password.');
+            default:
+                return back()->withErrors(['error' => 'Tipe user tidak valid.']);
         }
 
-        if($tipe === 'organisasi'){
-            $request->validate(['email' => 'required|email']);
-
-            $organisasi = Organisasi::where('email', $request->email)->first();
-
-            $organisasi->update([
-                'password' => $request->password,
-            ]);
-
-            return redirect()
-            ->route('login')
-            ->with('success', 'Berhasil Ubah Password.');
+        if (!$user) {
+            return back()->withErrors(['error' => 'Email tidak ditemukan.']);
         }
-        
-        return back()->withErrors(['error' => 'Email atau password salah.']);
+
+        // 🔐 Hash password sebelum disimpan
+        $user->update([
+            'password' => Hash::make($request->password),
+        ]);
+
+        return redirect()
+            ->route('login')
+            ->with('success', 'Berhasil ubah password.');
     }
 }
