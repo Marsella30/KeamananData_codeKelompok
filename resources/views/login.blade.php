@@ -94,7 +94,7 @@
                             <h4 class="mb-3 fw-bold text-start">Selamat Datang</h4>
                         </div>
 
-                        <div class="form-floating mb-4">
+                        <!-- <div class="form-floating mb-4">
                             <select name="tipe_user" class="form-select" id="floatingTipeUser" required>
                                 <option value="" selected disabled>Pilih Tipe Pengguna</option>
                                 <option value="pembeli">Pembeli</option>
@@ -103,7 +103,7 @@
                                 <option value="pegawai">Pegawai</option>
                             </select>
                             <label for="floatingTipeUser">Tipe Pengguna</label>
-                        </div>
+                        </div> -->
 
                         <div class="form-floating mb-4" id="emailField">
                             <input type="email" name="email" class="form-control" id="floatingInput" placeholder="Email" />

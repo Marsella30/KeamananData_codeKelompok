@@ -112,251 +112,417 @@ class LoginController extends Controller
         return view('login', compact('organisasiList'));
     }
 
+    // public function login(Request $request)
+    // {
+    //     // 1. Validasi input umum
+    //     $request->validate([
+    //         'tipe_user' => 'required|in:pembeli,penitip,organisasi,pegawai',
+    //         'password'  => 'required|string',
+    //     ]);
+
+    //     $tipe = $request->tipe_user;
+    //     $password = $request->password;
+
+    //     // Log percobaan login
+    //     Log::info('Login attempt (web)', [
+    //         'tipe_user' => $tipe,
+    //         'email' => $request->email ?? 'N/A',
+    //         'ip' => $request->ip(),
+    //         'user_agent' => $request->userAgent(),
+    //     ]);
+
+    //     switch ($tipe) {
+
+    //         // =================== PEMBELI ===================
+    //         case 'pembeli':
+    //             // Validasi email wajib ada
+    //             $request->validate(['email' => 'required|email']);
+
+    //             // Ambil data user Pembeli
+    //             $user = \App\Models\Pembeli::where('email', $request->email)->first();
+
+    //             if (!$user) {
+    //                 // Cek email di tabel lain
+    //                 $existsPenitip = Penitip::where('email', $request->email)->exists();
+    //                 $existsOrganisasi = Organisasi::where('email', $request->email)->exists();
+    //                 $existsPegawai = Pegawai::where('email', $request->email)->exists();
+
+    //                 // Logging debug
+    //                 Log::info('Cek email di tabel lain', [
+    //                     'penitip' => $existsPenitip,
+    //                     'organisasi' => $existsOrganisasi,
+    //                     'pegawai' => $existsPegawai,
+    //                 ]);
+
+    //                 // Tentukan pesan error
+    //                 $msg = ($existsPenitip || $existsOrganisasi || $existsPegawai)
+    //                     ? 'Email terdaftar tapi bukan sebagai Pembeli.'
+    //                     : 'Email tidak terdaftar.';
+
+    //                 // Logging gagal login
+    //                 Log::warning('Login gagal (web) - pembeli', [
+    //                     'email' => $request->email,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             if (!Hash::check($password, $user->password)) {
+    //                 $msg = 'Password salah untuk Pembeli.';
+    //                 Log::warning('Login gagal (web) - pembeli', [
+    //                     'email' => $request->email,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             // Generate OTP 6 digit
+    //             $otp = rand(100000, 999999);
+
+    //             // Simpan OTP & kadaluarsa
+    //             try {
+    //                 \DB::table('pembeli')
+    //                     ->where('id_pembeli', $user->id_pembeli)
+    //                     ->update([
+    //                         'otp_code' => $otp,
+    //                         'otp_expires_at' => now()->addMinutes(5),
+    //                     ]);
+    //                 Log::info('✅ OTP tersimpan', ['email' => $user->email, 'otp' => $otp]);
+    //             } catch (\Throwable $e) {
+    //                 Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
+    //                 return response()->json(['error' => 'Terjadi kesalahan saat menyimpan OTP.'], 500);
+    //             }
+
+    //             // Kirim OTP via email
+    //             try {
+    //                 Mail::to($user->email)->send(new \App\Mail\OtpMail($otp));
+    //             } catch (\Throwable $e) {
+    //                 Log::error('⚠️ Gagal kirim OTP: '.$e->getMessage());
+    //             }
+
+    //             // Simpan session sementara untuk login OTP
+    //             session([
+    //                 'pending_email' => $user->email,
+    //                 'pending_role'  => 'pembeli',
+    //             ]);
+
+    //             Log::info('Login sukses (web) - pembeli', ['email' => $user->email]);
+
+    //             return response()->json([
+    //                 'success' => true,
+    //                 'redirect_page' => route('otp.show'),
+    //                 'info' => 'Kode OTP telah dikirim ke email Anda dan berlaku 5 menit.'
+    //             ]);
+
+    //         // =================== PENITIP ===================
+    //         case 'penitip':
+    //             $request->validate(['email' => 'required|email']);
+    //             $user = Penitip::where('email', $request->email)->first();
+
+    //             if (!$user) {
+    //                 $msg = Pembeli::where('email', $request->email)->exists() ||
+    //                        Organisasi::where('email', $request->email)->exists() ||
+    //                        Pegawai::where('email', $request->email)->exists()
+    //                        ? 'Email terdaftar tapi bukan sebagai Penitip.'
+    //                        : 'Email tidak terdaftar.';
+
+    //                 Log::warning('Login gagal (web) - penitip', [
+    //                     'email' => $request->email,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             if (!Hash::check($password, $user->password)) {
+    //                 $msg = 'Password salah untuk Penitip.';
+    //                 Log::warning('Login gagal (web) - penitip', [
+    //                     'email' => $request->email,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             Auth::guard('penitip')->login($user);
+    //             $request->session()->regenerate();
+    //             Log::info('Login sukses (web) - penitip', ['email' => $user->email]);
+
+    //             return response()->json([
+    //                 'success' => true,
+    //                 'redirect_page' => route('dashboard.penitip')
+    //             ]);
+
+    //         // =================== ORGANISASI ===================
+    //         case 'organisasi':
+    //             $request->validate(['id_organisasi' => 'required|exists:organisasi,id_organisasi']);
+    //             $org = Organisasi::find($request->id_organisasi);
+
+    //             if (!$org) {
+    //                 $msg = 'Organisasi tidak ditemukan.';
+    //                 Log::warning('Login gagal (web) - organisasi', [
+    //                     'id_organisasi' => $request->id_organisasi,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             if (!Hash::check($password, $org->password)) {
+    //                 $msg = 'Password salah untuk Organisasi.';
+    //                 Log::warning('Login gagal (web) - organisasi', [
+    //                     'id_organisasi' => $request->id_organisasi,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             Auth::guard('organisasi')->login($org);
+    //             $request->session()->regenerate();
+    //             Log::info('Login sukses (web) - organisasi', ['id_organisasi' => $org->id_organisasi]);
+
+    //             return response()->json([
+    //                 'success' => true,
+    //                 'redirect_page' => route('organisasi.request.index')
+    //             ]);
+
+    //         // =================== PEGawai ===================
+    //         case 'pegawai':
+    //             $request->validate(['email' => 'required|email']);
+    //             $pegawai = Pegawai::where('email', $request->email)->first();
+
+    //             if (!$pegawai) {
+    //                 $msg = Pembeli::where('email', $request->email)->exists() ||
+    //                        Penitip::where('email', $request->email)->exists() ||
+    //                        Organisasi::where('email', $request->email)->exists()
+    //                        ? 'Email terdaftar tapi bukan sebagai Pegawai.'
+    //                        : 'Email tidak terdaftar.';
+
+    //                 Log::warning('Login gagal (web) - pegawai', [
+    //                     'email' => $request->email,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             if (!Hash::check($password, $pegawai->password)) {
+    //                 $msg = 'Password salah untuk Pegawai.';
+    //                 Log::warning('Login gagal (web) - pegawai', [
+    //                     'email' => $request->email,
+    //                     'reason' => $msg,
+    //                     'ip' => $request->ip(),
+    //                     'user_agent' => $request->userAgent(),
+    //                 ]);
+    //                 return response()->json(['error' => $msg], 422);
+    //             }
+
+    //             Auth::guard('pegawai')->login($pegawai);
+    //             $request->session()->regenerate();
+
+    //             $jabatan = strtolower(trim($pegawai->jabatan->nama_jabatan));
+    //             $dashboardRoutes = [
+    //                 'admin' => 'dashboard.admin',
+    //                 'kurir' => 'dashboard.kurir',
+    //                 'owner' => 'dashboard.owner',
+    //                 'kepala gudang' => 'dashboard.kepala_gudang',
+    //                 'pegawai gudang' => 'dashboard.pegawai_gudang',
+    //                 'customer service' => 'dashboard.cs',
+    //             ];
+
+    //             Log::info('Login sukses (web) - pegawai', ['email' => $pegawai->email, 'jabatan' => $jabatan]);
+
+    //             return response()->json([
+    //                 'success' => true,
+    //                 'redirect_page' => route($dashboardRoutes[$jabatan] ?? 'dashboard.pegawai')
+    //             ]);
+
+    //         default:
+    //             $msg = 'Login gagal. Periksa kembali data Anda.';
+    //             Log::warning('Login gagal (web) - unknown type', [
+    //                 'tipe_user' => $tipe,
+    //                 'ip' => $request->ip(),
+    //                 'user_agent' => $request->userAgent(),
+    //             ]);
+    //             return response()->json(['error' => $msg], 422);
+    //     }
+    // }
+
     public function login(Request $request)
     {
-        // 1. Validasi input umum
+        // Validasi dasar
         $request->validate([
-            'tipe_user' => 'required|in:pembeli,penitip,organisasi,pegawai',
-            'password'  => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string'
         ]);
 
-        $tipe = $request->tipe_user;
+        $email = $request->email;
         $password = $request->password;
 
-        // Log percobaan login
-        Log::info('Login attempt (web)', [
-            'tipe_user' => $tipe,
-            'email' => $request->email ?? 'N/A',
+        // Log percobaan login awal
+        Log::info('Login attempt', [
+            'email' => $email,
             'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
+            'user_agent' => $request->userAgent()
         ]);
 
-        switch ($tipe) {
+        // CARI USER DI SEMUA TABEL
+        $pembeli    = \App\Models\Pembeli::where('email', $email)->first();
+        $penitip    = \App\Models\Penitip::where('email', $email)->first();
+        $organisasi = \App\Models\Organisasi::where('email', $email)->first();
+        $pegawai    = \App\Models\Pegawai::where('email', $email)->first();
 
-            // =================== PEMBELI ===================
-            case 'pembeli':
-                // Validasi email wajib ada
-                $request->validate(['email' => 'required|email']);
+        // JIKA EMAIL TIDAK ADA DIMANAPUN
+        if (!$pembeli && !$penitip && !$organisasi && !$pegawai) {
 
-                // Ambil data user Pembeli
-                $user = \App\Models\Pembeli::where('email', $request->email)->first();
+            Log::warning('Login gagal - email tidak ditemukan', [
+                'email' => $email,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent()
+            ]);
 
-                if (!$user) {
-                    // Cek email di tabel lain
-                    $existsPenitip = Penitip::where('email', $request->email)->exists();
-                    $existsOrganisasi = Organisasi::where('email', $request->email)->exists();
-                    $existsPegawai = Pegawai::where('email', $request->email)->exists();
-
-                    // Logging debug
-                    Log::info('Cek email di tabel lain', [
-                        'penitip' => $existsPenitip,
-                        'organisasi' => $existsOrganisasi,
-                        'pegawai' => $existsPegawai,
-                    ]);
-
-                    // Tentukan pesan error
-                    $msg = ($existsPenitip || $existsOrganisasi || $existsPegawai)
-                        ? 'Email terdaftar tapi bukan sebagai Pembeli.'
-                        : 'Email tidak terdaftar.';
-
-                    // Logging gagal login
-                    Log::warning('Login gagal (web) - pembeli', [
-                        'email' => $request->email,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                if (!Hash::check($password, $user->password)) {
-                    $msg = 'Password salah untuk Pembeli.';
-                    Log::warning('Login gagal (web) - pembeli', [
-                        'email' => $request->email,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                // Generate OTP 6 digit
-                $otp = rand(100000, 999999);
-
-                // Simpan OTP & kadaluarsa
-                try {
-                    \DB::table('pembeli')
-                        ->where('id_pembeli', $user->id_pembeli)
-                        ->update([
-                            'otp_code' => $otp,
-                            'otp_expires_at' => now()->addMinutes(5),
-                        ]);
-                    Log::info('✅ OTP tersimpan', ['email' => $user->email, 'otp' => $otp]);
-                } catch (\Throwable $e) {
-                    Log::error('❌ Gagal menyimpan OTP: '.$e->getMessage());
-                    return response()->json(['error' => 'Terjadi kesalahan saat menyimpan OTP.'], 500);
-                }
-
-                // Kirim OTP via email
-                try {
-                    Mail::to($user->email)->send(new \App\Mail\OtpMail($otp));
-                } catch (\Throwable $e) {
-                    Log::error('⚠️ Gagal kirim OTP: '.$e->getMessage());
-                }
-
-                // Simpan session sementara untuk login OTP
-                session([
-                    'pending_email' => $user->email,
-                    'pending_role'  => 'pembeli',
-                ]);
-
-                Log::info('Login sukses (web) - pembeli', ['email' => $user->email]);
-
-                return response()->json([
-                    'success' => true,
-                    'redirect_page' => route('otp.show'),
-                    'info' => 'Kode OTP telah dikirim ke email Anda dan berlaku 5 menit.'
-                ]);
-
-            // =================== PENITIP ===================
-            case 'penitip':
-                $request->validate(['email' => 'required|email']);
-                $user = Penitip::where('email', $request->email)->first();
-
-                if (!$user) {
-                    $msg = Pembeli::where('email', $request->email)->exists() ||
-                           Organisasi::where('email', $request->email)->exists() ||
-                           Pegawai::where('email', $request->email)->exists()
-                           ? 'Email terdaftar tapi bukan sebagai Penitip.'
-                           : 'Email tidak terdaftar.';
-
-                    Log::warning('Login gagal (web) - penitip', [
-                        'email' => $request->email,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                if (!Hash::check($password, $user->password)) {
-                    $msg = 'Password salah untuk Penitip.';
-                    Log::warning('Login gagal (web) - penitip', [
-                        'email' => $request->email,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                Auth::guard('penitip')->login($user);
-                $request->session()->regenerate();
-                Log::info('Login sukses (web) - penitip', ['email' => $user->email]);
-
-                return response()->json([
-                    'success' => true,
-                    'redirect_page' => route('dashboard.penitip')
-                ]);
-
-            // =================== ORGANISASI ===================
-            case 'organisasi':
-                $request->validate(['id_organisasi' => 'required|exists:organisasi,id_organisasi']);
-                $org = Organisasi::find($request->id_organisasi);
-
-                if (!$org) {
-                    $msg = 'Organisasi tidak ditemukan.';
-                    Log::warning('Login gagal (web) - organisasi', [
-                        'id_organisasi' => $request->id_organisasi,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                if (!Hash::check($password, $org->password)) {
-                    $msg = 'Password salah untuk Organisasi.';
-                    Log::warning('Login gagal (web) - organisasi', [
-                        'id_organisasi' => $request->id_organisasi,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                Auth::guard('organisasi')->login($org);
-                $request->session()->regenerate();
-                Log::info('Login sukses (web) - organisasi', ['id_organisasi' => $org->id_organisasi]);
-
-                return response()->json([
-                    'success' => true,
-                    'redirect_page' => route('organisasi.request.index')
-                ]);
-
-            // =================== PEGawai ===================
-            case 'pegawai':
-                $request->validate(['email' => 'required|email']);
-                $pegawai = Pegawai::where('email', $request->email)->first();
-
-                if (!$pegawai) {
-                    $msg = Pembeli::where('email', $request->email)->exists() ||
-                           Penitip::where('email', $request->email)->exists() ||
-                           Organisasi::where('email', $request->email)->exists()
-                           ? 'Email terdaftar tapi bukan sebagai Pegawai.'
-                           : 'Email tidak terdaftar.';
-
-                    Log::warning('Login gagal (web) - pegawai', [
-                        'email' => $request->email,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                if (!Hash::check($password, $pegawai->password)) {
-                    $msg = 'Password salah untuk Pegawai.';
-                    Log::warning('Login gagal (web) - pegawai', [
-                        'email' => $request->email,
-                        'reason' => $msg,
-                        'ip' => $request->ip(),
-                        'user_agent' => $request->userAgent(),
-                    ]);
-                    return response()->json(['error' => $msg], 422);
-                }
-
-                Auth::guard('pegawai')->login($pegawai);
-                $request->session()->regenerate();
-
-                $jabatan = strtolower(trim($pegawai->jabatan->nama_jabatan));
-                $dashboardRoutes = [
-                    'admin' => 'dashboard.admin',
-                    'kurir' => 'dashboard.kurir',
-                    'owner' => 'dashboard.owner',
-                    'kepala gudang' => 'dashboard.kepala_gudang',
-                    'pegawai gudang' => 'dashboard.pegawai_gudang',
-                    'customer service' => 'dashboard.cs',
-                ];
-
-                Log::info('Login sukses (web) - pegawai', ['email' => $pegawai->email, 'jabatan' => $jabatan]);
-
-                return response()->json([
-                    'success' => true,
-                    'redirect_page' => route($dashboardRoutes[$jabatan] ?? 'dashboard.pegawai')
-                ]);
-
-            default:
-                $msg = 'Login gagal. Periksa kembali data Anda.';
-                Log::warning('Login gagal (web) - unknown type', [
-                    'tipe_user' => $tipe,
-                    'ip' => $request->ip(),
-                    'user_agent' => $request->userAgent(),
-                ]);
-                return response()->json(['error' => $msg], 422);
+            return response()->json(['error' => 'Email tidak terdaftar.'], 422);
         }
+
+        // Tentukan user yang ditemukan
+        $user = $pembeli ?? $penitip ?? $organisasi ?? $pegawai;
+
+        // TENTUKAN ROLE USER
+        $role = $user instanceof \App\Models\Pembeli    ? 'pembeli'
+            : ($user instanceof \App\Models\Penitip    ? 'penitip'
+            : ($user instanceof \App\Models\Organisasi ? 'organisasi'
+            : 'pegawai'));
+
+        // Cek password
+        if (!Hash::check($password, $user->password)) {
+
+            Log::warning("Login gagal - password salah ($role)", [
+                'email' => $email,
+                'ip' => $request->ip(),
+                'role' => $role,
+                'user_agent' => $request->userAgent()
+            ]);
+
+            return response()->json(['error' => 'Password salah.'], 422);
+        }
+
+        // =====================================================
+        // ===================== PEMBELI ========================
+        // =====================================================
+        if ($role === 'pembeli') {
+
+            $otp = rand(100000, 999999);
+
+            \DB::table('pembeli')->where('id_pembeli', $user->id_pembeli)->update([
+                'otp_code' => $otp,
+                'otp_expires_at' => now()->addMinutes(5)
+            ]);
+
+            Log::info('OTP generated for pembeli', [
+                'email' => $email,
+                'otp' => $otp
+            ]);
+
+            // Kirim email
+            try {
+                Mail::to($user->email)->send(new \App\Mail\OtpMail($otp));
+                Log::info("OTP sent to pembeli", ['email' => $email]);
+            } catch (\Throwable $e) {
+                Log::error("Gagal mengirim OTP pembeli: " . $e->getMessage());
+            }
+
+            session([
+                'pending_email' => $user->email,
+                'pending_role' => 'pembeli',
+            ]);
+
+            Log::info('Login sukses (pembeli) - OTP required', ['email' => $email]);
+
+            return response()->json([
+                'success' => true,
+                'redirect_page' => route('otp.show')
+            ]);
+        }
+
+        // =====================================================
+        // ====================== PENITIP =======================
+        // =====================================================
+        if ($role === 'penitip') {
+
+            Auth::guard('penitip')->login($user);
+
+            Log::info('Login sukses (penitip)', [
+                'email' => $email,
+                'ip' => $request->ip()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'redirect_page' => route('dashboard.penitip')
+            ]);
+        }
+
+        // =====================================================
+        // ===================== ORGANISASI =====================
+        // =====================================================
+        if ($role === 'organisasi') {
+
+            Auth::guard('organisasi')->login($user);
+
+            Log::info('Login sukses (organisasi)', [
+                'id_organisasi' => $user->id_organisasi,
+                'ip' => $request->ip()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'redirect_page' => route('organisasi.request.index')
+            ]);
+        }
+
+        // =====================================================
+        // ====================== PEGAWAI ========================
+        // =====================================================
+        if ($role === 'pegawai') {
+
+            Auth::guard('pegawai')->login($user);
+
+            $jabatan = strtolower($user->jabatan->nama_jabatan);
+
+            Log::info("Login sukses (pegawai)", [
+                'email' => $email,
+                'jabatan' => $jabatan,
+                'ip'      => $request->ip()
+            ]);
+
+            $routes = [
+                'admin' => 'dashboard.admin',
+                'kurir' => 'dashboard.kurir',
+                'owner' => 'dashboard.owner',
+                'kepala gudang' => 'dashboard.kepala_gudang',
+                'pegawai gudang' => 'dashboard.pegawai_gudang',
+                'customer service' => 'dashboard.cs',
+            ];
+
+            return response()->json([
+                'success' => true,
+                'redirect_page' => route($routes[$jabatan] ?? 'dashboard.pegawai'),
+            ]);
+        }
+
+        Log::error("Login gagal - role tidak dikenali", ['email' => $email]);
+        return response()->json(['error' => 'Login gagal.'], 422);
     }
 
     // public function login(Request $request)
