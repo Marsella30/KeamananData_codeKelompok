@@ -23,7 +23,7 @@ use App\Http\Controllers\BadgeController;
 use App\Http\Controllers\Api\AuthController;
 
 Route::post('/login', [AuthController::class, 'login'])
-    ->middleware(['throttle:2,1', 'log.throttle:2,1']);
+    ->middleware(['throttle:2,1']);
 
 Route::get('/me', [AuthController::class, 'me']);
 Route::post('/logout', [AuthController::class, 'logout']);
