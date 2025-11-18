@@ -158,10 +158,8 @@
     </div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"
-        integrity="sha384-C6RzsynM9kwDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
-        crossorigin="anonymous">
-</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     const tipeUserSelect = document.getElementById('floatingTipeUser');
     const emailField = document.getElementById('emailField');
@@ -190,7 +188,13 @@ const errorDiv = document.getElementById('errorMessages');
 axios.defaults.headers.common['X-CSRF-TOKEN'] = form.querySelector('input[name="_token"]').value;
 
 loginButton.addEventListener('click', async function() {
+
+    // Cegah double click
+    loginButton.disabled = true;
+    loginButton.innerText = "Processing...";
+
     errorDiv.classList.add('d-none'); // sembunyikan error sebelumnya
+
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
 
@@ -202,27 +206,35 @@ loginButton.addEventListener('click', async function() {
             window.location.href = response.data.redirect_page;
         }
     } catch (err) {
-        if(err.response && err.response.status === 429) {
+
+        // Kalau rate limit
+        if (err.response && err.response.status === 429) {
             const seconds = err.response.headers['retry-after'] || 60;
-            loginButton.disabled = true;
+
             let s = seconds;
             countdownLabel.innerText = `Coba lagi dalam ${s} detik`;
+
             const interval = setInterval(() => {
                 s--;
                 countdownLabel.innerText = `Coba lagi dalam ${s} detik`;
-                if(s <= 0) {
+
+                if (s <= 0) {
                     clearInterval(interval);
                     loginButton.disabled = false;
-                    countdownLabel.innerText = '';
+                    loginButton.innerText = "Login";
+                    countdownLabel.innerText = "";
                 }
             }, 1000);
-        } else if(err.response && err.response.data) {
-            errorDiv.innerText = err.response.data.error || 'Login gagal';
-            errorDiv.classList.remove('d-none');
+
         } else {
-            errorDiv.innerText = 'Terjadi kesalahan server';
-            errorDiv.classList.remove('d-none');
+            errorDiv.innerText = err.response?.data?.error || "Login gagal";
+            errorDiv.classList.remove("d-none");
+
+            // Re-enable tombol
+            loginButton.disabled = false;
+            loginButton.innerText = "Login";
         }
+
     }
 });
 </script>

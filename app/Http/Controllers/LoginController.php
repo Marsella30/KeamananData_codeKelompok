@@ -36,28 +36,71 @@ class LoginController extends Controller
 
     public function verifyOtp(Request $request)
     {
-        $request->validate(['otp' => 'required|numeric']);
+        // VALIDASI BARU → OTP ARRAY
+        $request->validate([
+            'otp' => 'required|array',       // otp harus array
+            'otp.*' => 'required|digits:1'   // setiap digit 1 angka
+        ]);
+
+        // Gabungkan array otp[] menjadi string "123456"
+        $inputOtp = implode('', $request->otp);
 
         $email = session('pending_email');
         $role = session('pending_role');
 
         if (!$email || !$role) {
+            Log::warning('OTP verification failed - session invalid', [
+                'email' => $email,
+                'role' => $role,
+                'ip' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
             return redirect()->route('login')->withErrors(['error' => 'Sesi login tidak valid.']);
         }
 
+        Log::info('OTP verification attempt', [
+            'email' => $email,
+            'input_otp' => $inputOtp,
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        // Ambil user
         $user = \App\Models\Pembeli::where('email', $email)->first();
 
-        if (!$user || $user->otp_code !== $request->otp || $user->otp_expires_at < now()) {
+        // Validasi OTP
+        if (
+            !$user ||
+            $user->otp_code !== $inputOtp ||
+            $user->otp_expires_at < now()
+        ) {
+            Log::warning('OTP verification failed', [
+                'email' => $email,
+                'input_otp' => $inputOtp,
+                'stored_otp' => $user->otp_code ?? null,
+                'expired_at' => $user->otp_expires_at ?? null,
+                'ip' => $request->ip(),
+            ]);
+
             return back()->withErrors(['otp' => 'Kode OTP salah atau kadaluarsa.']);
         }
 
-        // OTP valid → hapus dan login
-        $user->update(['otp_code' => null, 'otp_expires_at' => null]);
+        // SUCCESS
+        Log::info('OTP verified successfully', [
+            'email' => $email,
+            'ip' => $request->ip(),
+        ]);
+
+        // Hapus OTP
+        $user->update([
+            'otp_code' => null,
+            'otp_expires_at' => null
+        ]);
 
         Auth::guard('pembeli')->login($user);
         $request->session()->regenerate();
 
-        // hapus sesi sementara
         session()->forget(['pending_email', 'pending_role']);
 
         return redirect()->route('home')->with('success', 'Login berhasil!');

@@ -26,7 +26,10 @@ class RouteServiceProvider extends ServiceProvider
     public function boot()
     {
         RateLimiter::for('login', function ($request) {
-            return Limit::perMinute(2)->by($request->ip());
+            return [
+                Limit::perMinute(2)->by($request->ip()), // batas normal login
+                Limit::perSecond(1)->by($request->ip())  // cegah double click (anti spam)
+            ];
         });
     }
 

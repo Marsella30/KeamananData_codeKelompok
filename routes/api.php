@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\KurirController;
-use App\Http\Controllers\LoginController;
+// use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PegawaiController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -20,9 +20,13 @@ use App\Http\Controllers\TopSellerController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\BadgeController;
 
-Route::post('/login', [LoginController::class, 'loginMobile'])
-    ->middleware('throttle:5,1')  // Maks 5 request per 1 menit per IP
-    ->name('login');
+use App\Http\Controllers\Api\AuthController;
+
+Route::post('/login', [AuthController::class, 'login'])
+    ->middleware(['throttle:2,1', 'log.throttle:2,1']);
+
+Route::get('/me', [AuthController::class, 'me']);
+Route::post('/logout', [AuthController::class, 'logout']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [LoginController::class, 'logoutMobile']);
