@@ -130,6 +130,12 @@
                                 </a>
                             </li>
                             <li class="nav-item">
+                                <a href="{{ route('admin.log') }}" class="nav-link">
+                                    <i class="bi bi-journal-text"></i>
+                                    <p>Rekap Log</p>
+                                </a>
+                            </li>
+                            <li class="nav-item">
                                 <a href="{{ route('admin.topSeller') }}" class="nav-link">
                                     <i class="nav-icon bi bi-stars"></i>
                                     <p>Top Seller</p>

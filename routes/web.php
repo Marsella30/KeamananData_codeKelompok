@@ -235,6 +235,8 @@ Route::middleware('auth:pegawai')->get('/dashboard', function () {
 })->name('dashboard.admin');
 
 Route::middleware('auth:pegawai')->group(function () {
+    Route::get('/dashboard/log', [AdminController::class, 'log'])->name('admin.log');
+
     Route::get('/admin/top-seller', [AdminController::class, 'getTopSellerCurrentMonth'])->name('admin.topSeller');
     Route::get('/admin/top-seller/current-month', [AdminController::class, 'getTopSellerCurrentMonth'])->name('admin.topSellerCurrentMonth');
 Route::post('/admin/top-seller/last-month', [AdminController::class, 'setTopSellerLastMonth'])->name('admin.setTopSellerLastMonth');

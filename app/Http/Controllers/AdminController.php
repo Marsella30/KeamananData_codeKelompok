@@ -7,9 +7,27 @@ use App\Models\Penitip;
 use App\Models\Transaksi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+
 
 class AdminController extends Controller
 {
+
+    public function log()
+    {
+        $logPath = storage_path('logs/laravel.log');
+
+        if (!File::exists($logPath)) {
+            return view('Admin.log', [
+                'logs' => ['File log tidak ditemukan']
+            ]);
+        }
+
+        $logs = file($logPath, FILE_IGNORE_NEW_LINES);
+        $logs = array_reverse($logs);
+
+        return view('admin.log', compact('logs'));
+    }
 
     // Menampilkan Top Seller Bulan Berjalan dan daftar ranking penitip
     public function getTopSellerCurrentMonth()

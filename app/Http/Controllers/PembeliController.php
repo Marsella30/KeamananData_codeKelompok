@@ -78,9 +78,9 @@ class PembeliController extends Controller
             'username' => $request->username,
             'notelp' => $request->notelp,
             'email' => $request->email,
-            'password' => Hash::make($request->password), // 🔐 hash password
+            'password' => Hash::make($request->password),
             'poin' => 0,
-            'status_aktif' => 1, // langsung aktif
+            'status_aktif' => 1,
         ]);
 
         return redirect()
